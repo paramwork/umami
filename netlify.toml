@@ -1,3 +1,10 @@
+[build]
+command = "pnpm run build"
+
+[build.environment]
+# Umami 3.4.1's package.json requires pnpm 12 (engines.pnpm); Netlify's default is pnpm 10.
+PNPM_VERSION = "12.3.4"
+
 [functions]
 included_files = ["node_modules/.geo/**"]
 
