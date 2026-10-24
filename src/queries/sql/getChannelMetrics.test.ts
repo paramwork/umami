@@ -110,7 +110,9 @@ describe('getChannelMetrics postgres branch', () => {
       expect(query).toContain(`url_query ilike '%${escapeLike(val)}%'`);
     }
     for (const val of SEARCH_DOMAINS) {
-      expect(query).toContain(`referrer_domain ilike '%${escapeLike(val)}%'`);
+      expect(query).toContain(
+        `(referrer_domain ilike '${escapeLike(val)}%' or referrer_domain ilike '%.${escapeLike(val)}%')`,
+      );
     }
     for (const domainList of [
       LLM_DOMAINS,
@@ -120,7 +122,9 @@ describe('getChannelMetrics postgres branch', () => {
       VIDEO_DOMAINS,
     ]) {
       for (const val of domainList) {
-        expect(query).toContain(`referrer_domain ilike '%${escapeLike(val)}%'`);
+        expect(query).toContain(
+          `(referrer_domain ilike '${escapeLike(val)}%' or referrer_domain ilike '%.${escapeLike(val)}%')`,
+        );
       }
     }
     // referral clause uses a literal array, not a constant
@@ -148,9 +152,21 @@ describe('getChannelMetrics postgres branch', () => {
     const escapeLike = (val: string) =>
       val.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
 
-    for (const val of [...PAID_AD_PARAMS, ...LLM_DOMAINS, ...SEARCH_DOMAINS]) {
+    for (const val of PAID_AD_PARAMS) {
       expect(query).toContain(`'%${escapeLike(val)}%'`);
     }
+    for (const val of [...LLM_DOMAINS, ...SEARCH_DOMAINS]) {
+      expect(query).toContain(`'%.${escapeLike(val)}%'`);
+    }
+  });
+
+  test('matches a referrer domain or its subdomains, never a domain that contains the text', async () => {
+    await getChannelMetrics('website-1', {});
+    const [query] = prismaRawQuery.mock.calls[0];
+
+    // `t.co` is X's link shortener; a contains-match also caught getlaunchlist.com and microsoft.com.
+    expect(query).toContain("(referrer_domain ilike 't.co%' or referrer_domain ilike '%.t.co%')");
+    expect(query).not.toContain("referrer_domain ilike '%t.co%'");
   });
 });
 

@@ -61,12 +61,12 @@ async function relationalQuery(websiteId: string, filters: QueryFilters) {
           when ${toPostgresLikeClause('utm_medium', ['referral', 'app', 'link'])} then 'referral'
           when utm_medium ilike '%affiliate%' then 'affiliate'
           when utm_medium ilike '%sms%' or utm_source ilike '%sms%' then 'sms'
-          when ${toPostgresLikeClause('referrer_domain', LLM_DOMAINS)} then 'llm'
-          when ${toPostgresLikeClause('referrer_domain', SEARCH_DOMAINS)} or utm_medium ilike '%organic%' then concat(prefix, 'Search')
-          when ${toPostgresLikeClause('referrer_domain', SOCIAL_DOMAINS)} then concat(prefix, 'Social')
-          when ${toPostgresLikeClause('referrer_domain', EMAIL_DOMAINS)} or utm_medium ilike '%mail%' then 'email'
-          when ${toPostgresLikeClause('referrer_domain', SHOPPING_DOMAINS)} or utm_medium ilike '%shop%' then concat(prefix, 'Shopping')
-          when ${toPostgresLikeClause('referrer_domain', VIDEO_DOMAINS)} or utm_medium ilike '%video%' then concat(prefix, 'Video')
+          when ${toPostgresDomainClause('referrer_domain', LLM_DOMAINS)} then 'llm'
+          when ${toPostgresDomainClause('referrer_domain', SEARCH_DOMAINS)} or utm_medium ilike '%organic%' then concat(prefix, 'Search')
+          when ${toPostgresDomainClause('referrer_domain', SOCIAL_DOMAINS)} then concat(prefix, 'Social')
+          when ${toPostgresDomainClause('referrer_domain', EMAIL_DOMAINS)} or utm_medium ilike '%mail%' then 'email'
+          when ${toPostgresDomainClause('referrer_domain', SHOPPING_DOMAINS)} or utm_medium ilike '%shop%' then concat(prefix, 'Shopping')
+          when ${toPostgresDomainClause('referrer_domain', VIDEO_DOMAINS)} or utm_medium ilike '%video%' then concat(prefix, 'Video')
           when referrer_domain != regexp_replace(hostname, '^www.', '') and referrer_domain != '' then 'referral'
           else '' end AS x,
           session_id,
@@ -186,4 +186,18 @@ function escapePostgresLikeValue(val: string) {
 
 function toPostgresLikeClause(column: string, arr: string[]) {
   return arr.map(val => `${column} ilike '%${escapePostgresLikeValue(val)}%'`).join(' OR\n  ');
+}
+
+/**
+ * A referrer domain matching one of the patterns: the domain itself or one of its subdomains, never a
+ * domain that merely contains the text (`t.co` must not match `getlaunchlist.com`).
+ */
+function toPostgresDomainClause(column: string, arr: string[]) {
+  return arr
+    .map(val => {
+      const value = escapePostgresLikeValue(val);
+
+      return `(${column} ilike '${value}%' or ${column} ilike '%.${value}%')`;
+    })
+    .join(' OR\n  ');
 }
