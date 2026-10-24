@@ -157,10 +157,13 @@ async function relationalQuery(
         sum(revenue_data.value) as "value"
       from revenue_data
       join (
-        select website_id, session_id, referrer_domain, created_at
+        -- One row per session, its first event. Events that tie on the first timestamp (a server
+        -- request records several in the same second) would otherwise each repeat the revenue.
+        select distinct on (session_id) website_id, session_id, referrer_domain, created_at
         from website_event
         where website_id = {{websiteId::uuid}}
-          and created_at between {{startDate}} and {{endDate}}) we
+          and created_at between {{startDate}} and {{endDate}}
+        order by session_id, created_at) we
       on we.website_id = revenue_data.website_id
         and we.session_id = revenue_data.session_id
         and we.created_at = revenue_data.created_at
@@ -218,10 +221,12 @@ async function relationalQuery(
         r.value
       from revenue_data r
       join (
-        select website_id, session_id, referrer_domain, url_query, utm_medium, utm_source, hostname, created_at
+        -- One row per session, its first event (see the referrer query above).
+        select distinct on (session_id) website_id, session_id, referrer_domain, url_query, utm_medium, utm_source, hostname, created_at
         from website_event
         where website_id = {{websiteId::uuid}}
-          and created_at between {{startDate}} and {{endDate}}) we
+          and created_at between {{startDate}} and {{endDate}}
+        order by session_id, created_at) we
       on we.website_id = r.website_id
         and we.session_id = r.session_id
         and we.created_at = r.created_at),
