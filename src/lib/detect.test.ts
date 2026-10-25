@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { getLocation, hasBlockedIp } from './detect';
+import { getClientInfo, getLocation, hasBlockedIp } from './detect';
 import { getIpAddress } from './ip';
 
 const IP = '127.0.0.1';
@@ -80,4 +80,43 @@ test('hasBlockedIp: returns false for malformed client ip with cidr block', () =
   process.env.IGNORE_IP = '10.0.0.0/8';
 
   expect(hasBlockedIp('not-an-ip')).toBe(false);
+});
+
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15';
+
+test('getClientInfo: uses a location sent in the payload (fork patch)', async () => {
+  // A public ip with no geo database: a lookup would throw, so this proves it is skipped.
+  const request = new Request('https://example.com/api/send', {
+    headers: { 'cf-ipcountry': 'FR', 'cf-region-code': 'IDF', 'cf-ipcity': 'Paris' },
+  });
+
+  await expect(
+    getClientInfo(request, {
+      ip: '8.8.8.8',
+      userAgent: UA,
+      country: 'US',
+      region: 'CA',
+      city: 'Los Angeles',
+    }),
+  ).resolves.toMatchObject({ country: 'US', region: 'US-CA', city: 'Los Angeles' });
+
+  await expect(
+    getClientInfo(request, { ip: '8.8.8.8', userAgent: UA, country: 'US', region: 'US-CA' }),
+  ).resolves.toMatchObject({ country: 'US', region: 'US-CA', city: undefined });
+
+  await expect(
+    getClientInfo(request, { ip: '8.8.8.8', userAgent: UA, country: 'DE' }),
+  ).resolves.toMatchObject({ country: 'DE', region: undefined, city: undefined });
+});
+
+test('getClientInfo: without a payload country, a local ip still yields no location', async () => {
+  isLocalhost.default.mockResolvedValue(true);
+
+  const request = new Request('https://example.com/api/send', {
+    headers: { 'cf-ipcountry': 'FR', 'cf-region-code': 'IDF', 'cf-ipcity': 'Paris' },
+  });
+
+  await expect(
+    getClientInfo(request, { ip: IP, userAgent: UA, region: 'CA', city: 'Los Angeles' }),
+  ).resolves.toMatchObject({ country: undefined, region: undefined, city: undefined });
 });

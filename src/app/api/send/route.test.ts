@@ -231,6 +231,55 @@ describe('schema validation', () => {
   });
 });
 
+describe('schema validation: payload location (fork patch)', () => {
+  async function getSchema() {
+    await callPOST({ type: 'event', payload: { website: WEBSITE_ID, url: '/' } });
+    return parseRequestMock.mock.calls[0][1] as {
+      safeParse: (value: unknown) => {
+        success: boolean;
+        data?: { payload: Record<string, unknown> };
+      };
+    };
+  }
+
+  const parse = (schema: Awaited<ReturnType<typeof getSchema>>, location: object) =>
+    schema.safeParse({ type: 'event', payload: { website: WEBSITE_ID, ...location } });
+
+  test('accepts and uppercases a country, region and city', async () => {
+    const schema = await getSchema();
+
+    const result = parse(schema, { country: 'us', region: 'ca', city: 'Los Angeles' });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.payload).toMatchObject({
+      country: 'US',
+      region: 'CA',
+      city: 'Los Angeles',
+    });
+    expect(parse(schema, { country: 'US', region: 'us-ca' }).data?.payload.region).toBe('US-CA');
+    expect(parse(schema, { country: 'GB', region: 'GB-ENG' }).success).toBe(true);
+  });
+
+  test('rejects a malformed country or region', async () => {
+    const schema = await getSchema();
+
+    for (const country of ['USA', 'U', '', '12', '=1']) {
+      expect(parse(schema, { country }).success).toBe(false);
+    }
+
+    for (const region of ['California', 'US-CALI', '=1', 'U$', '']) {
+      expect(parse(schema, { country: 'US', region }).success).toBe(false);
+    }
+  });
+
+  test('rejects formula triggers and overlong values in city', async () => {
+    const schema = await getSchema();
+
+    expect(parse(schema, { country: 'US', city: '=HYPERLINK()' }).success).toBe(false);
+    expect(parse(schema, { country: 'US', city: 'a'.repeat(101) }).success).toBe(false);
+  });
+});
+
 describe('bot detection gate', () => {
   test('returns a 200 no-op response for bots and skips persistence', async () => {
     isbotMock.mockReturnValue(true);

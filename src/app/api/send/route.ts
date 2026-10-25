@@ -53,6 +53,20 @@ const schema = z.object({
       browser: z.string().optional(),
       os: z.string().optional(),
       device: z.string().optional(),
+      // Fork patch (paramwork): a server-side sender can pass the visitor's
+      // location, used instead of the IP / edge-header lookup in getClientInfo.
+      // country: ISO 3166-1 alpha-2; region: ISO 3166-2 subdivision, "CA" or "US-CA".
+      country: z
+        .string()
+        .regex(/^[a-zA-Z]{2}$/)
+        .transform(val => val.toUpperCase())
+        .optional(),
+      region: z
+        .string()
+        .regex(/^([a-zA-Z]{2}-)?[a-zA-Z0-9]{1,3}$/)
+        .transform(val => val.toUpperCase())
+        .optional(),
+      city: safeStringParam().max(100).optional(),
       lcp: z.number().nonnegative().max(60000).optional(),
       inp: z.number().nonnegative().max(60000).optional(),
       cls: z.number().nonnegative().max(100).optional(),
